@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Configurador de Chat Widget</title>
+  <link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Configurador de Chat Widget</h1>
+      <p>Configure seu chat integrado com Dialogflow CX</p>
+    </header>
+    
+    <div class="content">
+      <!-- Coluna Esquerda - Configurador -->
+      <div class="configurador">
+        <form id="formWidget">
+          <section class="secao">
+            <h2>Identificação</h2>
+            <div class="campo">
+              <label for="cliente">Nome do Cliente</label>
+              <input type="text" id="cliente" required>
+            </div>
+            <div class="campo">
+              <label for="dominio">Domínio Autorizado</label>
+              <input type="text" id="dominio" placeholder="exemplo.com.br" required>
+            </div>
+          </section>
+          
+          <section class="secao">
+            <h2>Perfil do Assistente</h2>
+            <div class="campo">
+              <label for="nomeBotVisivel">Nome do Assistente</label>
+              <input type="text" id="nomeBotVisivel" placeholder="Assistente Virtual" value="Assistente">
+            </div>
+            <div class="campo">
+              <label for="imagemPerfil">Avatar do Assistente</label>
+              <div class="upload-area">
+                <input type="file" id="imagemPerfil" accept="image/*" style="display:none;">
+                <div class="upload-preview" id="uploadPreview">
+                  <img id="previewImg" style="display:none;">
+                  <div id="uploadPlaceholder">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/>
+                    </svg>
+                    <p>Clique para adicionar</p>
+                    <small>Recomendado: 100x100px</small>
+                  </div>
+                </div>
+                <button type="button" id="btnUpload" class="btn-upload">Escolher Imagem</button>
+                <button type="button" id="btnRemover" class="btn-remover" style="display:none;">Remover</button>
+              </div>
+            </div>
+          </section>
+          
+          <section class="secao">
+            <h2>Dialogflow</h2>
+            <div class="campo">
+              <label for="agentId">Agent ID</label>
+              <input type="text" id="agentId" required>
+            </div>
+            <div class="campo">
+              <label for="projectId">Project ID</label>
+              <input type="text" id="projectId" required>
+            </div>
+            <div class="campo">
+              <label for="location">Região</label>
+              <select id="location" required>
+                <option value="southamerica-east1">São Paulo (southamerica-east1)</option>
+                <option value="us-central1">US Central</option>
+                <option value="europe-west1">Europa</option>
+              </select>
+            </div>
+          </section>
+          
+          <section class="secao">
+            <h2>Visual</h2>
+            <div class="grupo-campos">
+              <div class="campo">
+                <label for="corPrimaria">Cor Principal</label>
+                <input type="color" id="corPrimaria" value="#2c3e50">
+              </div>
+              <div class="campo">
+                <label for="corSecundaria">Cor de Fundo</label>
+                <input type="color" id="corSecundaria" value="#f7f8fc">
+              </div>
+            </div>
+            <div class="campo">
+              <label for="posicao">Posição</label>
+              <select id="posicao">
+                <option value="bottom-right">Inferior Direita</option>
+                <option value="bottom-left">Inferior Esquerda</option>
+              </select>
+            </div>
+            <div class="grupo-campos">
+              <div class="campo">
+                <label for="largura">Largura (px)</label>
+                <input type="number" id="largura" value="380" min="300" max="500">
+              </div>
+              <div class="campo">
+                <label for="altura">Altura (px)</label>
+                <input type="number" id="altura" value="600" min="400" max="700">
+              </div>
+            </div>
+          </section>
+          
+          <section class="secao">
+            <h2>Mensagens</h2>
+            <div class="campo">
+              <label for="boasVindas">Mensagem de Boas-vindas</label>
+              <textarea id="boasVindas" rows="2">Olá! Como posso ajudar você hoje?</textarea>
+            </div>
+            <div class="campo">
+              <label for="placeholder">Placeholder do Input</label>
+              <input type="text" id="placeholder" value="Digite sua mensagem...">
+            </div>
+            <div class="campo">
+              <label for="offline">Mensagem Offline</label>
+              <input type="text" id="offline" value="No momento estamos offline">
+            </div>
+          </section>
+          
+          <section class="secao">
+            <h2>Recursos</h2>
+            <div class="campo-checkbox">
+              <input type="checkbox" id="upload" checked>
+              <label for="upload">Habilitar envio de arquivos no chat</label>
+            </div>
+            <div class="campo-checkbox">
+              <input type="checkbox" id="som" checked>
+              <label for="som">Sons de notificação</label>
+            </div>
+            <div class="campo-checkbox">
+              <input type="checkbox" id="historico" checked>
+              <label for="historico">Manter histórico</label>
+            </div>
+            <div class="campo-checkbox">
+              <input type="checkbox" id="mostrarRefresh" checked>
+              <label for="mostrarRefresh">Mostrar botão de refresh</label>
+            </div>
+            <div class="campo">
+              <label>Botões Rápidos (um por linha)</label>
+              <textarea id="botoesRapidos" rows="3">Ajuda
+Falar com atendente
+Informações</textarea>
+            </div>
+          </section>
+          
+          <!-- Hidden inputs para manter compatibilidade -->
+          <input type="hidden" id="timeoutHabilitado" value="false">
+          <input type="hidden" id="timeoutMinutos" value="30">
+          <input type="hidden" id="timeoutAviso" value="">
+          <input type="hidden" id="timeoutReinicio" value="">
+          
+          <button type="submit" class="btn-gerar">Gerar Widget</button>
+        </form>
+      </div>
+      
+      <!-- Coluna Direita - Preview STICKY -->
+      <div class="preview-container">
+        <div class="preview-wrapper">
+          <h2>Preview <span class="sticky-badge" id="stickyBadge">Fixado</span></h2>
+          <div id="preview">
+            <iframe src="about:blank" id="previewFrame"></iframe>
+          </div>
+          
+          <div id="codigoEmbed" class="codigo-embed" style="display:none;">
+            <h3>Código para Instalação</h3>
+            <pre><code id="codigo"></code></pre>
+            <button class="btn-copiar" onclick="copiarCodigo()">Copiar Código</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <script src="js/api.js"></script>
+  <script src="js/configurador.js"></script>
+  <script src="js/preview.js"></script>
+  <script src="js/upload.js"></script>
+  <script src="js/realtime-preview.js"></script>
+  <script src="js/better-experience.js"></script>
+  <script src="js/enhancements.js"></script>
+  <script src="js/preview-live.js"></script>
+</body>
+</html>

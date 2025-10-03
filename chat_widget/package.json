@@ -1,0 +1,11 @@
+{
+  "name": "chat-widget-dialogflow",
+  "version": "1.0.0",
+  "description": "Sistema de Chat Widget configurável para Dialogflow CX",
+  "scripts": {
+    "install-all": "cd backend && npm install",
+    "dev": "cd backend && npm run dev",
+    "build": "cd backend && npm run build",
+    "start": "cd backend && npm start"
+  }
+}
