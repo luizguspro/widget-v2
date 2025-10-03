@@ -1,0 +1,77 @@
+import clienteDialogflow from '../config/dialogflow.config';
+import { protos } from '@google-cloud/dialogflow';
+
+type DetectIntentResponse = protos.google.cloud.dialogflow.v2.IDetectIntentResponse;
+
+class DialogflowService {
+  async processarMensagem(config: any, sessionId: string, texto: string): Promise<any> {
+    try {
+      // Se não tiver credenciais configuradas, retornar resposta mock
+      if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+        return {
+          texto: 'Resposta de teste: ' + texto,
+          tipo: 'texto',
+          dados: null
+        };
+      }
+      
+      const sessionPath = clienteDialogflow.projectAgentSessionPath(
+        config.projectId,
+        sessionId
+      );
+      
+      const requisicao = {
+        session: sessionPath,
+        queryInput: {
+          text: {
+            text: 'oi',
+            languageCode: 'pt-BR'
+          }
+        }
+      };
+      
+      const [resposta] = await clienteDialogflow.detectIntent(requisicao);
+      
+      return this.formatarResposta(resposta as DetectIntentResponse);
+    } catch (erro) {
+      console.error('Erro Dialogflow:', erro);
+      return {
+        texto: 'Desculpe, ocorreu um erro ao processar sua mensagem.',
+        tipo: 'erro',
+        dados: null
+      };
+    }
+  }
+  
+  private formatarResposta(resposta: DetectIntentResponse): any {
+    const queryResult = resposta.queryResult;
+    
+    if (!queryResult) {
+      return {
+        texto: 'Não consegui processar sua mensagem.',
+        tipo: 'erro',
+        dados: null
+      };
+    }
+    
+    const respostaFormatada = {
+      texto: queryResult.fulfillmentText || '',
+      tipo: 'texto',
+      dados: null as any
+    };
+    
+    // Processar rich content se houver
+    if (queryResult.fulfillmentMessages && queryResult.fulfillmentMessages.length > 0) {
+      const mensagem = queryResult.fulfillmentMessages[0];
+      
+      if (mensagem.payload) {
+        respostaFormatada.tipo = 'rich';
+        respostaFormatada.dados = mensagem.payload;
+      }
+    }
+    
+    return respostaFormatada;
+  }
+}
+
+export default new DialogflowService();

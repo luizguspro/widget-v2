@@ -1,126 +1,237 @@
-import clienteDialogflow from '../config/dialogflow.config';
-import { protos } from '@google-cloud/dialogflow';
-
-type DetectIntentResponse = protos.google.cloud.dialogflow.v2.IDetectIntentResponse;
+// backend/src/services/dialogflow.service.ts
+import { SessionsClient } from '@google-cloud/dialogflow-cx';
+import { v4 as uuidv4 } from 'uuid';
+import * as path from 'path';
 
 class DialogflowService {
+  private clientsCache: Map<string, SessionsClient> = new Map();
+  
+  constructor() {
+    console.log('[DIALOGFLOW] Service inicializado (multi-tenant)');
+  }
+  
+  // Cria ou retorna cliente específico para cada configuração
+  private getClient(config: any): SessionsClient | null {
+    try {
+      // SEMPRE usa o arquivo local, ignora variável de ambiente
+      const fs = require('fs');
+      const path = require('path');
+      
+      // Tenta vários caminhos até achar o arquivo
+      const possiveisCaminhos = [
+        path.join(process.cwd(), 'service-account.json'),
+        path.join(__dirname, 'service-account.json'),
+        path.join(__dirname, '..', 'service-account.json'),
+        path.join(__dirname, '../..', 'service-account.json'),
+        './service-account.json'
+      ];
+      
+      let credentialsPath = null;
+      for (const caminho of possiveisCaminhos) {
+        if (fs.existsSync(caminho)) {
+          credentialsPath = caminho;
+          console.log('[DIALOGFLOW] Credenciais encontradas em:', caminho);
+          break;
+        }
+      }
+      
+      if (!credentialsPath) {
+        console.warn('[DIALOGFLOW] Sem credenciais - modo teste');
+        return null;
+      }
+      
+      // Chave única para cache baseada na configuração
+      const cacheKey = `${config.projectId}-${config.location}-${config.agentId}`;
+      
+      // Verifica cache
+      if (this.clientsCache.has(cacheKey)) {
+        return this.clientsCache.get(cacheKey)!;
+      }
+      
+      // Determina o endpoint baseado na location
+      let apiEndpoint = 'dialogflow.googleapis.com'; // default para global
+      
+      if (config.location && config.location !== 'global') {
+        // Para regiões específicas
+        apiEndpoint = `${config.location}-dialogflow.googleapis.com`;
+      }
+      
+      console.log(`[DIALOGFLOW] Criando cliente para ${config.location} (${apiEndpoint})`);
+      
+      // Cria novo cliente
+      const client = new SessionsClient({
+        keyFilename: credentialsPath,
+        apiEndpoint: apiEndpoint
+      });
+      
+      // Salva no cache
+      this.clientsCache.set(cacheKey, client);
+      
+      return client;
+    } catch (erro: any) {
+      console.error('[DIALOGFLOW] Erro ao criar cliente:', erro.message);
+      return null;
+    }
+  }
+  
+  private getSessionPath(client: SessionsClient, config: any, sessionId: string): string {
+    return client.projectLocationAgentSessionPath(
+      config.projectId,
+      config.location || 'global',
+      config.agentId,
+      sessionId
+    );
+  }
   
   async iniciarConversa(config: any, sessionId: string): Promise<any> {
-    console.log('[DIALOGFLOW] Iniciando conversa...');
-    console.log('[DIALOGFLOW] Config:', config);
+    const client = this.getClient(config);
+    
+    if (!client) {
+      console.log('[DIALOGFLOW] Sem cliente - retornando null');
+      return null;
+    }
     
     try {
-      if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-        console.log('[DIALOGFLOW] Sem credenciais - usando mensagem padrão');
-        return null;
+      const sessionPath = this.getSessionPath(client, config, sessionId);
+      
+      // Determina o language code baseado na location
+      const languageCode = config.location === 'global' ? 'pt-br' : 'pt-BR';
+      
+      const request = {
+        session: sessionPath,
+        queryInput: {
+          event: {
+            event: 'WELCOME'
+          },
+          languageCode: languageCode
+        }
+      };
+      
+      console.log(`[DIALOGFLOW] Iniciando conversa com agente ${config.agentId}`);
+      
+      const [response] = await client.detectIntent(request);
+      const resultado = this.formatarResposta(response);
+      
+      if (resultado && resultado.texto) {
+        console.log('[DIALOGFLOW] Mensagem inicial recebida do Dialogflow');
+        return resultado;
       }
       
-      const sessionPath = clienteDialogflow.projectAgentSessionPath(
-        config.projectId,
-        sessionId
-      );
-      
-      console.log('[DIALOGFLOW] Session path:', sessionPath);
-      
-      try {
-        // Tentar com "oi"
-        const requisicao = {
-          session: sessionPath,
-          queryInput: {
-            text: {
-              text: 'oi',
-              languageCode: 'pt-BR'
-            }
-          }
-        };
-        
-        const [resposta] = await clienteDialogflow.detectIntent(requisicao);
-        console.log('[DIALOGFLOW] Resposta recebida!');
-        return this.formatarResposta(resposta as DetectIntentResponse);
-        
-      } catch (erro: any) {
-        console.log('[DIALOGFLOW] Erro:', erro?.message || 'Erro desconhecido');
-        return null;
-      }
+      return null;
       
     } catch (erro: any) {
-      console.error('[DIALOGFLOW] Erro geral:', erro?.message || 'Erro desconhecido');
+      console.error('[DIALOGFLOW] Erro ao iniciar:', erro.message);
       return null;
     }
   }
   
   async processarMensagem(config: any, sessionId: string, texto: string): Promise<any> {
+    const client = this.getClient(config);
+    
+    if (!client) {
+      console.log('[DIALOGFLOW] Modo teste ativo');
+      return {
+        texto: `[Modo Teste] Você disse: "${texto}"\n\nPara funcionar com o Dialogflow, adicione o arquivo service-account.json`,
+        tipo: 'texto',
+        dados: null
+      };
+    }
+    
     try {
-      if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+      const sessionPath = this.getSessionPath(client, config, sessionId);
+      const languageCode = config.location === 'global' ? 'pt-br' : 'pt-BR';
+      
+      const request = {
+        session: sessionPath,
+        queryInput: {
+          text: {
+            text: texto
+          },
+          languageCode: languageCode
+        }
+      };
+      
+      console.log(`[DIALOGFLOW] Processando: "${texto}" para agente ${config.agentId}`);
+      
+      const [response] = await client.detectIntent(request);
+      const resultado = this.formatarResposta(response);
+      
+      return resultado;
+      
+    } catch (erro: any) {
+      console.error('[DIALOGFLOW] Erro:', erro.message);
+      
+      if (erro.code === 7 || erro.code === 16) {
         return {
-          texto: 'Bot de teste: ' + texto,
-          tipo: 'texto',
+          texto: '⚠️ Erro de autenticação. Verifique o arquivo service-account.json',
+          tipo: 'erro',
           dados: null
         };
       }
       
-      const sessionPath = clienteDialogflow.projectAgentSessionPath(
-        config.projectId,
-        sessionId
-      );
+      if (erro.code === 5) {
+        return {
+          texto: '⚠️ Agente não encontrado. Verifique o Agent ID e a região.',
+          tipo: 'erro',
+          dados: null
+        };
+      }
       
-      const requisicao = {
-        session: sessionPath,
-        queryInput: {
-          text: {
-            text: texto,
-            languageCode: 'pt-BR'
-          }
-        }
-      };
-      
-      const [resposta] = await clienteDialogflow.detectIntent(requisicao);
-      return this.formatarResposta(resposta as DetectIntentResponse);
-      
-    } catch (erro: any) {
-      console.error('[DIALOGFLOW] Erro:', erro?.message || 'Erro desconhecido');
       return {
-        texto: 'Desculpe, ocorreu um erro.',
+        texto: 'Desculpe, ocorreu um erro. Tente novamente.',
         tipo: 'erro',
         dados: null
       };
     }
   }
   
-  private formatarResposta(resposta: DetectIntentResponse): any {
-    const queryResult = resposta.queryResult;
+  private formatarResposta(response: any): any {
+    const queryResult = response?.queryResult;
     
     if (!queryResult) {
       return {
-        texto: 'Sem resposta do Dialogflow',
+        texto: 'Sem resposta',
         tipo: 'erro',
         dados: null
       };
     }
     
-    console.log('[DIALOGFLOW] Intent:', queryResult.intent?.displayName);
-    console.log('[DIALOGFLOW] Fulfillment:', queryResult.fulfillmentText);
+    const mensagens: string[] = [];
     
-    // Juntar todas as mensagens de texto
-    const textos: string[] = [];
-    
-    if (queryResult.fulfillmentText) {
-      textos.push(queryResult.fulfillmentText);
-    }
-    
-    if (queryResult.fulfillmentMessages) {
-      queryResult.fulfillmentMessages.forEach(msg => {
-        if (msg.text && msg.text.text) {
-          textos.push(...msg.text.text);
+    if (queryResult.responseMessages) {
+      queryResult.responseMessages.forEach((msg: any) => {
+        if (msg.text?.text) {
+          mensagens.push(...msg.text.text);
+        }
+        
+        if (msg.payload?.richContent) {
+          console.log('[DIALOGFLOW] Rich content detectado');
+        }
+        
+        if (msg.liveAgentHandoff) {
+          mensagens.push('🤝 Transferindo para um atendente...');
         }
       });
     }
     
-    return {
-      texto: textos.join('\n\n') || 'Sem resposta',
-      tipo: 'texto',
-      dados: null
+    const dados = {
+      intent: queryResult.match?.intent?.displayName || null,
+      confidence: queryResult.match?.confidence || null,
+      parameters: queryResult.parameters?.fields || {},
+      currentPage: queryResult.currentPage?.displayName || null
     };
+    
+    return {
+      texto: mensagens.join('\n\n') || 'Desculpe, não entendi.',
+      tipo: 'texto',
+      dados: dados
+    };
+  }
+  
+  // Limpar cache se necessário
+  limparCache() {
+    this.clientsCache.clear();
+    console.log('[DIALOGFLOW] Cache de clientes limpo');
   }
 }
 

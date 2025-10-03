@@ -1,0 +1,782 @@
+(function() {
+  // Detectar URL base do script atual
+  const scripts = document.getElementsByTagName('script');
+  let baseUrl = 'http://localhost:3000';
+  
+  for (let i = 0; i < scripts.length; i++) {
+    if (scripts[i].src && scripts[i].src.includes('/widget/widget.js')) {
+      const url = new URL(scripts[i].src);
+      baseUrl = url.origin;
+      break;
+    }
+  }
+  
+  const ChatWidget = {
+    config: null,
+    sessionId: null,
+    isOpen: false,
+    container: null,
+    baseUrl: baseUrl,
+    mensagemBoasVindasMostrada: false,
+    
+    async inicializar(opcoes) {
+      if (!opcoes.widgetId) {
+        console.error('Widget ID é obrigatório');
+        return;
+      }
+      
+      console.log('Inicializando widget com base URL:', this.baseUrl);
+      
+      // Buscar configuração
+      try {
+        const response = await fetch(`${this.baseUrl}/api/widgets/${opcoes.widgetId}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          credentials: 'include'
+        });
+        
+        const data = await response.json();
+        
+        if (!data.sucesso) {
+          console.error('Widget não encontrado');
+          return;
+        }
+        
+        this.config = data.widget;
+        this.criarWidget();
+        this.iniciarSessao();
+        
+        // Mostrar mensagem de boas-vindas após 2 segundos
+        if (this.config.mensagens.boasVindas && !this.isOpen) {
+          setTimeout(() => this.mostrarMensagemFlutuante(), 2000);
+        }
+      } catch (erro) {
+        console.error('Erro ao inicializar widget:', erro);
+      }
+    },
+    
+    async iniciarSessao() {
+      try {
+        const response = await fetch(`${this.baseUrl}/api/chat/sessao/${this.config.widgetId}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          credentials: 'include'
+        });
+        
+        const data = await response.json();
+        this.sessionId = data.sessionId;
+      } catch (erro) {
+        console.error('Erro ao iniciar sessão:', erro);
+      }
+    },
+    
+    mostrarMensagemFlutuante() {
+      if (this.mensagemBoasVindasMostrada || this.isOpen) return;
+      
+      const mensagemEl = document.getElementById('chatMensagemFlutuante');
+      if (mensagemEl) {
+        mensagemEl.style.display = 'block';
+        mensagemEl.style.animation = 'slideIn 0.3s ease-out';
+        this.mensagemBoasVindasMostrada = true;
+        
+        // Auto-ocultar após 10 segundos
+        setTimeout(() => {
+          if (!this.isOpen) {
+            this.ocultarMensagemFlutuante();
+          }
+        }, 10000);
+      }
+    },
+    
+    ocultarMensagemFlutuante() {
+      const mensagemEl = document.getElementById('chatMensagemFlutuante');
+      if (mensagemEl) {
+        mensagemEl.style.animation = 'slideOut 0.3s ease-out';
+        setTimeout(() => {
+          mensagemEl.style.display = 'none';
+        }, 300);
+      }
+    },
+    
+    async reiniciarConversa() {
+      const container = document.getElementById('chatMensagens');
+      container.innerHTML = '';
+      
+      await this.iniciarSessao();
+      
+      if (this.config.mensagens.boasVindas) {
+        this.adicionarMensagem(this.config.mensagens.boasVindas, 'bot');
+      }
+    },
+    
+    criarWidget() {
+      // Criar container
+      this.container = document.createElement('div');
+      this.container.id = 'chat-widget-container';
+      this.container.innerHTML = this.gerarHTML();
+      document.body.appendChild(this.container);
+      
+      // Adicionar estilos
+      const style = document.createElement('style');
+      style.textContent = this.gerarCSS();
+      document.head.appendChild(style);
+      
+      // Adicionar event listeners
+      this.configurarEventos();
+      
+      // Mostrar mensagem de boas-vindas no chat quando abrir
+      if (this.config.mensagens.boasVindas) {
+        this.adicionarMensagem(this.config.mensagens.boasVindas, 'bot');
+      }
+    },
+    
+    gerarHTML() {
+      const imagemPerfil = this.config.visual.imagemPerfil || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIGZpbGw9IndoaXRlIj48Y2lyY2xlIGN4PSIyMCIgY3k9IjIwIiByPSIxOCIgZmlsbD0iIzRhNWY3ZiIvPjxwYXRoIGZpbGw9IndoaXRlIiBkPSJNMjAgMTJjLTIuMiAwLTQgMS44LTQgNHMxLjggNCA0IDQgNC0xLjggNC00LTEuOC00LTQtNHptMCA2Yy0xLjEgMC0yLS45LTItMnMuOS0yIDItMiAyIC45IDIgMi0uOSAyLTIgMnptMCA0Yy0yLjcgMC01IC45LTYuOSAyLjVDMTQuNiAyNi4yIDE3LjIgMjcgMjAgMjdzNS40LS44IDYuOS0yLjVDMjUgMjIuOSAyMi43IDIyIDIwIDIyeiIvPjwvc3ZnPg==';
+      const nomeBotVisivel = this.config.visual.nomeBotVisivel || 'Assistente';
+      
+      return `
+        <!-- Botão flutuante com avatar -->
+        <div class="chat-widget-botao" id="chatBotao">
+          <img src="${imagemPerfil}" alt="${nomeBotVisivel}" class="chat-widget-botao-avatar">
+          <span class="chat-widget-botao-badge">💬</span>
+        </div>
+        
+        <!-- Mensagem flutuante de boas-vindas -->
+        <div class="chat-widget-mensagem-flutuante" id="chatMensagemFlutuante" style="display:none;">
+          <button class="chat-widget-fechar-flutuante" onclick="ChatWidget.ocultarMensagemFlutuante()">×</button>
+          <div class="chat-widget-mensagem-flutuante-header">
+            <img src="${imagemPerfil}" alt="${nomeBotVisivel}">
+            <span>${nomeBotVisivel}</span>
+          </div>
+          <div class="chat-widget-mensagem-flutuante-corpo">
+            ${this.config.mensagens.boasVindas}
+          </div>
+        </div>
+        
+        <!-- Janela do chat -->
+        <div class="chat-widget-janela" id="chatJanela" style="display:none;">
+          <div class="chat-widget-header">
+            <div class="chat-widget-header-info">
+              <img src="${imagemPerfil}" class="chat-widget-avatar" alt="Bot">
+              <div>
+                <span class="chat-widget-nome">${nomeBotVisivel}</span>
+                <span class="chat-widget-status">Online</span>
+              </div>
+            </div>
+            <div class="chat-widget-header-acoes">
+              ${this.config.recursos.mostrarRefresh ? `
+              <button class="chat-widget-refresh" id="chatRefresh" title="Reiniciar conversa">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="white">
+                  <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+                </svg>
+              </button>
+              ` : ''}
+              <button class="chat-widget-fechar" id="chatFechar">×</button>
+            </div>
+          </div>
+          <div class="chat-widget-mensagens" id="chatMensagens"></div>
+          ${this.config.recursos.botoesRapidos?.length ? `
+          <div class="chat-widget-botoes-rapidos">
+            ${this.config.recursos.botoesRapidos.map(texto => 
+              `<button class="chat-widget-botao-rapido" data-texto="${texto}">${texto}</button>`
+            ).join('')}
+          </div>
+          ` : ''}
+          <div class="chat-widget-input-container">
+            ${this.config.recursos.upload ? `
+            <button class="chat-widget-upload" id="chatUpload" title="Enviar arquivo">
+              📎
+            </button>
+            <input type="file" id="chatFileInput" style="display:none;" accept="image/*,.pdf,.doc,.docx">
+            ` : ''}
+            <input type="text" id="chatInput" placeholder="${this.config.mensagens.placeholder}">
+            <button id="chatEnviar">➤</button>
+          </div>
+        </div>
+      `;
+    },
+    
+    gerarCSS() {
+      const pos = this.config.visual.posicao === 'bottom-left' ? 'left: 20px;' : 'right: 20px;';
+      
+      return `
+        #chat-widget-container {
+          position: fixed;
+          bottom: 20px;
+          ${pos}
+          z-index: 999999;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        }
+        
+        /* Botão flutuante com avatar */
+        .chat-widget-botao {
+          width: 60px;
+          height: 60px;
+          border-radius: 50%;
+          background: ${this.config.visual.corPrimaria};
+          cursor: pointer;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+          transition: all 0.3s ease;
+          position: relative;
+          overflow: hidden;
+        }
+        
+        .chat-widget-botao:hover {
+          transform: scale(1.1);
+          box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+        }
+        
+        .chat-widget-botao-avatar {
+          width: 100%;
+          height: 100%;
+          border-radius: 50%;
+          object-fit: cover;
+        }
+        
+        .chat-widget-botao-badge {
+          position: absolute;
+          bottom: -2px;
+          right: -2px;
+          background: #4CAF50;
+          width: 24px;
+          height: 24px;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 12px;
+          border: 2px solid white;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        /* Mensagem flutuante de boas-vindas */
+        .chat-widget-mensagem-flutuante {
+          position: absolute;
+          bottom: 70px;
+          ${this.config.visual.posicao === 'bottom-left' ? 'left: 0;' : 'right: 0;'}
+          background: white;
+          border-radius: 12px;
+          box-shadow: 0 5px 25px rgba(0,0,0,0.15);
+          padding: 12px;
+          width: 280px;
+          max-width: 280px;
+          z-index: 999998;
+        }
+        
+        .chat-widget-fechar-flutuante {
+          position: absolute;
+          top: 8px;
+          right: 8px;
+          background: none;
+          border: none;
+          font-size: 18px;
+          cursor: pointer;
+          color: #666;
+          width: 20px;
+          height: 20px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 50%;
+          transition: background 0.2s;
+        }
+        
+        .chat-widget-fechar-flutuante:hover {
+          background: #f0f0f0;
+        }
+        
+        .chat-widget-mensagem-flutuante-header {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 10px;
+          padding-right: 20px;
+        }
+        
+        .chat-widget-mensagem-flutuante-header img {
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          object-fit: cover;
+        }
+        
+        .chat-widget-mensagem-flutuante-header span {
+          font-weight: 600;
+          color: #333;
+          font-size: 14px;
+        }
+        
+        .chat-widget-mensagem-flutuante-corpo {
+          color: #555;
+          font-size: 14px;
+          line-height: 1.5;
+        }
+        
+        /* Animações */
+        @keyframes slideIn {
+          from {
+            opacity: 0;
+            transform: translateY(10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        
+        @keyframes slideOut {
+          from {
+            opacity: 1;
+            transform: translateY(0);
+          }
+          to {
+            opacity: 0;
+            transform: translateY(10px);
+          }
+        }
+        
+        @keyframes pulse {
+          0% { box-shadow: 0 0 0 0 ${this.config.visual.corPrimaria}40; }
+          70% { box-shadow: 0 0 0 10px rgba(0,0,0,0); }
+          100% { box-shadow: 0 0 0 0 rgba(0,0,0,0); }
+        }
+        
+        .chat-widget-botao.pulse {
+          animation: pulse 2s infinite;
+        }
+        
+        /* Janela do chat */
+        .chat-widget-janela {
+          position: absolute;
+          bottom: 0;
+          ${this.config.visual.posicao === 'bottom-left' ? 'left: 0;' : 'right: 0;'}
+          width: ${this.config.visual.largura}px;
+          height: ${this.config.visual.altura}px;
+          background: white;
+          border-radius: 12px;
+          box-shadow: 0 5px 40px rgba(0,0,0,0.16);
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+        }
+        
+        .chat-widget-header {
+          background: ${this.config.visual.corPrimaria};
+          color: white;
+          padding: 16px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+        
+        .chat-widget-header-info {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+        
+        .chat-widget-avatar {
+          width: 40px;
+          height: 40px;
+          border-radius: 50%;
+          object-fit: cover;
+          border: 2px solid rgba(255,255,255,0.3);
+        }
+        
+        .chat-widget-nome {
+          font-weight: 600;
+          display: block;
+        }
+        
+        .chat-widget-status {
+          font-size: 12px;
+          opacity: 0.9;
+        }
+        
+        .chat-widget-header-acoes {
+          display: flex;
+          gap: 8px;
+        }
+        
+        .chat-widget-refresh,
+        .chat-widget-fechar {
+          background: rgba(255,255,255,0.2);
+          border: none;
+          color: white;
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: background 0.2s;
+        }
+        
+        .chat-widget-refresh:hover,
+        .chat-widget-fechar:hover {
+          background: rgba(255,255,255,0.3);
+        }
+        
+        .chat-widget-fechar {
+          font-size: 20px;
+        }
+        
+        .chat-widget-mensagens {
+          flex: 1;
+          overflow-y: auto;
+          padding: 20px;
+          background: #f9f9f9;
+        }
+        
+        .chat-widget-mensagem {
+          margin-bottom: 12px;
+          display: flex;
+        }
+        
+        .chat-widget-mensagem-user {
+          justify-content: flex-end;
+        }
+        
+        .chat-widget-mensagem-bot {
+          justify-content: flex-start;
+        }
+        
+        .chat-widget-mensagem-conteudo {
+          max-width: 70%;
+          padding: 10px 14px;
+          border-radius: 18px;
+          line-height: 1.4;
+          font-size: 14px;
+        }
+        
+        .chat-widget-mensagem-user .chat-widget-mensagem-conteudo {
+          background: ${this.config.visual.corPrimaria};
+          color: white;
+          border-bottom-right-radius: 4px;
+        }
+        
+        .chat-widget-mensagem-bot .chat-widget-mensagem-conteudo {
+          background: white;
+          color: #333;
+          border-bottom-left-radius: 4px;
+          box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+        
+        .chat-widget-botoes-rapidos {
+          padding: 10px;
+          background: white;
+          border-top: 1px solid #eee;
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+        
+        .chat-widget-botao-rapido {
+          padding: 6px 12px;
+          background: white;
+          border: 1px solid ${this.config.visual.corPrimaria};
+          color: ${this.config.visual.corPrimaria};
+          border-radius: 16px;
+          cursor: pointer;
+          font-size: 13px;
+          transition: all 0.2s;
+        }
+        
+        .chat-widget-botao-rapido:hover {
+          background: ${this.config.visual.corPrimaria};
+          color: white;
+        }
+        
+        .chat-widget-input-container {
+          padding: 12px;
+          background: white;
+          border-top: 1px solid #eee;
+          display: flex;
+          gap: 8px;
+        }
+        
+        .chat-widget-upload {
+          background: none;
+          border: none;
+          font-size: 20px;
+          cursor: pointer;
+          padding: 8px;
+          border-radius: 50%;
+          transition: background 0.2s;
+        }
+        
+        .chat-widget-upload:hover {
+          background: #f0f0f0;
+        }
+        
+        #chatInput {
+          flex: 1;
+          border: 1px solid #ddd;
+          border-radius: 20px;
+          padding: 10px 16px;
+          font-size: 14px;
+          outline: none;
+          transition: border-color 0.2s;
+        }
+        
+        #chatInput:focus {
+          border-color: ${this.config.visual.corPrimaria};
+        }
+        
+        #chatEnviar {
+          background: ${this.config.visual.corPrimaria};
+          color: white;
+          border: none;
+          width: 40px;
+          height: 40px;
+          border-radius: 50%;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: transform 0.2s;
+        }
+        
+        #chatEnviar:hover {
+          transform: scale(1.1);
+        }
+        
+        .chat-widget-digitando {
+          display: flex;
+          gap: 4px;
+          padding: 10px 14px;
+          background: white;
+          border-radius: 18px;
+          border-bottom-left-radius: 4px;
+          width: fit-content;
+          box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+        
+        .chat-widget-digitando span {
+          width: 8px;
+          height: 8px;
+          background: #999;
+          border-radius: 50%;
+          animation: digitando 1.4s infinite;
+        }
+        
+        .chat-widget-digitando span:nth-child(2) {
+          animation-delay: 0.2s;
+        }
+        
+        .chat-widget-digitando span:nth-child(3) {
+          animation-delay: 0.4s;
+        }
+        
+        @keyframes digitando {
+          0%, 60%, 100% {
+            transform: translateY(0);
+          }
+          30% {
+            transform: translateY(-10px);
+          }
+        }
+        
+        /* Responsivo */
+        @media (max-width: 480px) {
+          .chat-widget-janela {
+            width: 100vw;
+            height: 100vh;
+            bottom: 0;
+            right: 0 !important;
+            left: 0 !important;
+            border-radius: 0;
+          }
+          
+          .chat-widget-mensagem-flutuante {
+            width: calc(100vw - 80px);
+            max-width: none;
+          }
+        }
+      `;
+    },
+    
+    configurarEventos() {
+      // Botão principal
+      document.getElementById('chatBotao').addEventListener('click', () => {
+        this.toggle();
+        // Adicionar efeito pulse por 2 segundos quando abre
+        if (this.isOpen) {
+          document.getElementById('chatBotao').classList.add('pulse');
+          setTimeout(() => {
+            document.getElementById('chatBotao').classList.remove('pulse');
+          }, 2000);
+        }
+      });
+      
+      // Mensagem flutuante - clicar para abrir chat
+      const mensagemFlutuante = document.getElementById('chatMensagemFlutuante');
+      if (mensagemFlutuante) {
+        mensagemFlutuante.addEventListener('click', (e) => {
+          if (e.target.className !== 'chat-widget-fechar-flutuante') {
+            this.ocultarMensagemFlutuante();
+            this.abrir();
+          }
+        });
+      }
+      
+      // Fechar
+      document.getElementById('chatFechar').addEventListener('click', () => this.fechar());
+      
+      // Refresh
+      const btnRefresh = document.getElementById('chatRefresh');
+      if (btnRefresh) {
+        btnRefresh.addEventListener('click', () => {
+          if (confirm('Deseja reiniciar a conversa?')) {
+            this.reiniciarConversa();
+          }
+        });
+      }
+      
+      // Upload de arquivo
+      const btnUpload = document.getElementById('chatUpload');
+      const fileInput = document.getElementById('chatFileInput');
+      
+      if (btnUpload && fileInput) {
+        btnUpload.addEventListener('click', () => {
+          fileInput.click();
+        });
+        
+        fileInput.addEventListener('change', (e) => {
+          const file = e.target.files[0];
+          if (file) {
+            this.processarArquivo(file);
+            fileInput.value = '';
+          }
+        });
+      }
+      
+      // Enviar mensagem
+      document.getElementById('chatEnviar').addEventListener('click', () => this.enviarMensagem());
+      document.getElementById('chatInput').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') this.enviarMensagem();
+      });
+      
+      // Botões rápidos
+      document.querySelectorAll('.chat-widget-botao-rapido').forEach(btn => {
+        btn.addEventListener('click', () => {
+          this.enviarMensagem(btn.dataset.texto);
+        });
+      });
+    },
+    
+    processarArquivo(file) {
+      const maxSize = 5 * 1024 * 1024;
+      if (file.size > maxSize) {
+        this.adicionarMensagem('Arquivo muito grande. Máximo: 5MB', 'sistema');
+        return;
+      }
+      
+      const mensagemArquivo = `📎 ${file.name} (${(file.size / 1024).toFixed(1)}KB)`;
+      this.adicionarMensagem(mensagemArquivo, 'user');
+      
+      this.mostrarDigitando();
+      setTimeout(() => {
+        this.removerDigitando();
+        this.adicionarMensagem('Arquivo recebido! Estou processando...', 'bot');
+      }, 1500);
+    },
+    
+    toggle() {
+      this.isOpen ? this.fechar() : this.abrir();
+    },
+    
+    abrir() {
+      this.ocultarMensagemFlutuante();
+      document.getElementById('chatJanela').style.display = 'flex';
+      document.getElementById('chatBotao').style.display = 'none';
+      this.isOpen = true;
+      document.getElementById('chatInput').focus();
+    },
+    
+    fechar() {
+      document.getElementById('chatJanela').style.display = 'none';
+      document.getElementById('chatBotao').style.display = 'flex';
+      this.isOpen = false;
+    },
+    
+    async enviarMensagem(texto) {
+      const input = document.getElementById('chatInput');
+      const mensagem = texto || input.value.trim();
+      
+      if (!mensagem) return;
+      
+      input.value = '';
+      this.adicionarMensagem(mensagem, 'user');
+      this.mostrarDigitando();
+      
+      try {
+        const response = await fetch(`${this.baseUrl}/api/chat/mensagem`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            widgetId: this.config.widgetId,
+            sessionId: this.sessionId,
+            mensagem: mensagem
+          })
+        });
+        
+        const data = await response.json();
+        
+        this.removerDigitando();
+        
+        if (data.sucesso) {
+          this.adicionarMensagem(data.resposta.texto, 'bot');
+          
+          if (this.config.recursos.som) {
+            this.tocarSom();
+          }
+        } else {
+          this.adicionarMensagem('Desculpe, ocorreu um erro.', 'bot');
+        }
+      } catch (erro) {
+        this.removerDigitando();
+        this.adicionarMensagem(this.config.mensagens.offline, 'bot');
+      }
+    },
+    
+    adicionarMensagem(texto, tipo) {
+      const container = document.getElementById('chatMensagens');
+      const mensagem = document.createElement('div');
+      mensagem.className = `chat-widget-mensagem chat-widget-mensagem-${tipo}`;
+      mensagem.innerHTML = `<div class="chat-widget-mensagem-conteudo">${texto}</div>`;
+      container.appendChild(mensagem);
+      container.scrollTop = container.scrollHeight;
+    },
+    
+    mostrarDigitando() {
+      const container = document.getElementById('chatMensagens');
+      const digitando = document.createElement('div');
+      digitando.id = 'digitandoIndicador';
+      digitando.className = 'chat-widget-digitando';
+      digitando.innerHTML = '<span></span><span></span><span></span>';
+      container.appendChild(digitando);
+      container.scrollTop = container.scrollHeight;
+    },
+    
+    removerDigitando() {
+      const digitando = document.getElementById('digitandoIndicador');
+      if (digitando) digitando.remove();
+    },
+    
+    tocarSom() {
+      const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF');
+      audio.play().catch(() => {});
+    }
+  };
+  
+  window.ChatWidget = ChatWidget;
+})();

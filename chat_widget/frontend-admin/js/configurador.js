@@ -21,7 +21,7 @@ document.getElementById('formWidget').addEventListener('submit', async (e) => {
       nomeBotVisivel: document.getElementById('nomeBotVisivel').value
     },
     mensagens: {
-      boasVindas: document.getElementById('boasVindas').value,
+      boasVindas: document.getElementById('boasVindas').value || '', // Vazio = usa Dialogflow
       placeholder: document.getElementById('placeholder').value,
       offline: document.getElementById('offline').value,
       timeoutAviso: document.getElementById('timeoutAviso').value,

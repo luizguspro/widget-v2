@@ -1,0 +1,133 @@
+import clienteDialogflow from '../config/dialogflow.config';
+import { protos } from '@google-cloud/dialogflow';
+
+type DetectIntentResponse = protos.google.cloud.dialogflow.v2.IDetectIntentResponse;
+
+class DialogflowService {
+  
+  // Novo método para iniciar conversa
+  async iniciarConversa(config: any, sessionId: string): Promise<any> {
+    try {
+      // Se não tiver credenciais configuradas, retornar null
+      if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+        return null;
+      }
+      
+      const sessionPath = clienteDialogflow.projectAgentSessionPath(
+        config.projectId,
+        sessionId
+      );
+      
+      // Enviar evento de início ou mensagem vazia para trigger inicial
+      const requisicao = {
+        session: sessionPath,
+        queryInput: {
+          event: {
+            name: 'WELCOME', // Evento padrão do Dialogflow
+            languageCode: 'pt-BR'
+          }
+        }
+      };
+      
+      // Alternativa: enviar texto vazio ou "oi"
+      // const requisicao = {
+      //   session: sessionPath,
+      //   queryInput: {
+      //     text: {
+      //       text: 'oi', // Trigger inicial
+      //       languageCode: 'pt-BR'
+      //     }
+      //   }
+      // };
+      
+      const [resposta] = await clienteDialogflow.detectIntent(requisicao);
+      
+      return this.formatarResposta(resposta as DetectIntentResponse);
+    } catch (erro) {
+      console.error('Erro ao iniciar conversa Dialogflow:', erro);
+      return null;
+    }
+  }
+  
+  async processarMensagem(config: any, sessionId: string, texto: string): Promise<any> {
+    try {
+      if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+        return {
+          texto: 'Resposta de teste: ' + texto,
+          tipo: 'texto',
+          dados: null
+        };
+      }
+      
+      const sessionPath = clienteDialogflow.projectAgentSessionPath(
+        config.projectId,
+        sessionId
+      );
+      
+      const requisicao = {
+        session: sessionPath,
+        queryInput: {
+          text: {
+            text: texto,
+            languageCode: 'pt-BR'
+          }
+        }
+      };
+      
+      const [resposta] = await clienteDialogflow.detectIntent(requisicao);
+      
+      return this.formatarResposta(resposta as DetectIntentResponse);
+    } catch (erro) {
+      console.error('Erro Dialogflow:', erro);
+      return {
+        texto: 'Desculpe, ocorreu um erro ao processar sua mensagem.',
+        tipo: 'erro',
+        dados: null
+      };
+    }
+  }
+  
+  private formatarResposta(resposta: DetectIntentResponse): any {
+    const queryResult = resposta.queryResult;
+    
+    if (!queryResult) {
+      return {
+        texto: 'Não consegui processar sua mensagem.',
+        tipo: 'erro',
+        dados: null
+      };
+    }
+    
+    const respostaFormatada = {
+      texto: queryResult.fulfillmentText || '',
+      tipo: 'texto',
+      dados: null as any
+    };
+    
+    // Processar rich content se houver
+    if (queryResult.fulfillmentMessages && queryResult.fulfillmentMessages.length > 0) {
+      const mensagem = queryResult.fulfillmentMessages[0];
+      
+      if (mensagem.payload) {
+        respostaFormatada.tipo = 'rich';
+        respostaFormatada.dados = mensagem.payload;
+      }
+      
+      // Se houver múltiplas mensagens, concatenar
+      if (queryResult.fulfillmentMessages.length > 1) {
+        const textos = queryResult.fulfillmentMessages
+          .filter(m => m.text && m.text.text && m.text.text.length > 0)
+          .map(m => m.text!.text![0])
+          .join('\n\n');
+        
+        if (textos) {
+          respostaFormatada.texto = textos;
+        }
+      }
+    }
+    
+    return respostaFormatada;
+  }
+}
+
+export default new DialogflowService();

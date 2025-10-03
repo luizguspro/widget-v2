@@ -65,22 +65,42 @@
       }
     },
     
-    async iniciarSessao() {
-      try {
-        const response = await fetch(`${this.baseUrl}/api/chat/sessao/${this.config.widgetId}`, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          credentials: 'include'
-        });
-        
-        const data = await response.json();
-        this.sessionId = data.sessionId;
-      } catch (erro) {
-        console.error('Erro ao iniciar sessão:', erro);
+  async iniciarSessao() {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/chat/sessao/${this.config.widgetId}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include'
+      });
+      
+      const data = await response.json();
+      this.sessionId = data.sessionId;
+      
+      // SEMPRE usa a mensagem que vem do Dialogflow
+      if (data.mensagemInicial) {
+        // Limpa mensagens antigas
+        const container = document.getElementById('chatMensagens');
+        if (container) {
+          container.innerHTML = '';
+        }
+        // Adiciona a mensagem do Dialogflow
+        this.adicionarMensagem(data.mensagemInicial, 'bot');
+        console.log('[WIDGET] Mensagem inicial do Dialogflow recebida');
       }
-    },
+      
+      // Configurações de timeout se existirem
+      if (data.timeoutHabilitado && data.timeoutMinutos) {
+        this.configurarTimeout(data.timeoutMinutos);
+      }
+      
+    } catch (erro) {
+      console.error('[WIDGET] Erro ao iniciar sessão:', erro);
+      // Se falhar, adiciona mensagem padrão
+      this.adicionarMensagem('Olá! Como posso ajudar?', 'bot');
+    }
+  },
     
     mostrarIndicadorDigitando() {
       const indicador = document.getElementById('chatIndicadorDigitando');

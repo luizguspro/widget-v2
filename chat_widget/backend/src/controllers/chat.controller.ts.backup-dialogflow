@@ -1,4 +1,3 @@
-// backend/src/controllers/chat.controller.ts
 import { Router, Request, Response } from 'express';
 import dialogflowService from '../services/dialogflow.service';
 import widgetService from '../services/widget.service';
@@ -13,7 +12,7 @@ const sessoes = new Map<string, {
   timeoutMinutos?: number;
 }>();
 
-// Limpar sessões expiradas
+// Limpar sessões expiradas a cada minuto
 setInterval(() => {
   const agora = Date.now();
   sessoes.forEach((sessao, sessionId) => {
@@ -32,27 +31,6 @@ router.get('/sessao/:widgetId', async (req: Request, res: Response) => {
     }
     
     const sessionId = uuidv4();
-    
-    // SEMPRE busca mensagem inicial do Dialogflow
-    let mensagemInicial = null;
-    try {
-      // Envia "oi" automaticamente para o Dialogflow
-      const respostaInicial = await dialogflowService.processarMensagem(
-        widget.dialogflow,
-        sessionId,
-        'oi' // Sempre envia "oi" para pegar a mensagem de boas-vindas
-      );
-      
-      if (respostaInicial && respostaInicial.texto) {
-        mensagemInicial = respostaInicial.texto;
-        console.log('[CHAT] Mensagem inicial do Dialogflow recebida');
-      }
-    } catch (erro) {
-      console.log('[CHAT] Erro ao buscar mensagem inicial:', erro);
-      // Se falhar, usa mensagem padrão simples
-      mensagemInicial = 'Olá! Como posso ajudar?';
-    }
-    
     sessoes.set(sessionId, { 
       sessionId, 
       timestamp: Date.now(),
@@ -63,12 +41,10 @@ router.get('/sessao/:widgetId', async (req: Request, res: Response) => {
     res.json({ 
       sucesso: true, 
       sessionId,
-      mensagemInicial, // Sempre envia a mensagem do Dialogflow
       timeoutHabilitado: widget.recursos.timeoutHabilitado,
       timeoutMinutos: widget.recursos.timeoutMinutos 
     });
   } catch (erro) {
-    console.error('[CHAT] Erro ao criar sessão:', erro);
     res.status(500).json({ erro: 'Erro ao criar sessão' });
   }
 });
@@ -77,6 +53,7 @@ router.post('/mensagem', async (req: Request, res: Response) => {
   try {
     const { widgetId, sessionId, mensagem } = req.body;
     
+    // Validar sessão
     const sessao = sessoes.get(sessionId);
     if (!sessao) {
       return res.status(401).json({ 
@@ -91,6 +68,7 @@ router.post('/mensagem', async (req: Request, res: Response) => {
       return res.status(404).json({ erro: 'Widget não encontrado' });
     }
     
+    // Verificar timeout personalizado
     const timeoutMs = (widget.recursos.timeoutMinutos || 30) * 60 * 1000;
     if (Date.now() - sessao.timestamp > timeoutMs) {
       sessoes.delete(sessionId);
@@ -98,21 +76,23 @@ router.post('/mensagem', async (req: Request, res: Response) => {
         erro: 'Sessão expirada por inatividade',
         tipo: 'timeout',
         reiniciar: true,
-        mensagem: widget.mensagens.timeoutReinicio || 'Sessão expirada. Vamos começar novamente?'
+        mensagem: widget.mensagens.timeoutReinicio
       });
     }
     
+    // Processar mensagem com Dialogflow
     const resposta = await dialogflowService.processarMensagem(
       widget.dialogflow,
       sessionId,
       mensagem
     );
     
+    // Atualizar timestamp da sessão
     sessao.timestamp = Date.now();
     
     res.json({ sucesso: true, resposta });
   } catch (erro) {
-    console.error('[CHAT] Erro ao processar mensagem:', erro);
+    console.error('Erro ao processar mensagem:', erro);
     res.status(500).json({ erro: 'Erro ao processar mensagem' });
   }
 });
